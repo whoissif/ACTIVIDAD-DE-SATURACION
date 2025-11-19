@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Determinación de la Actividad de saturación Isótopo Radiactivo</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .large-export-buttons {
+            display: flex;
+            gap: 20px;
+            margin: 30px 0;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .large-export-btn {
+            padding: 15px 30px;
+            font-size: 18px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+        .large-export-btn:hover {
+            background-color: #0b7dda;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+        }
+        .large-export-btn span {
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Determinación de la Actividad de saturación Isótopo Radiactivo</h1>
+        <div class="controls">
+            <label for="rowCount">Número de filas:</label>
+            <input type="number" id="rowCount" value="30" min="5" max="100" step="1">
+            <button onclick="resizeTable()">Actualizar Tabla</button>
+            <label for="startTime">Tiempo inicial (min):</label>
+            <input type="number" id="startTime" value="0" step="0.1">
+            <button onclick="autoFillTimes()">Rellenar tiempos</button>
+            <label for="timeStep">Paso de tiempo (min):</label>
+            <input type="number" id="timeStep" value="1" step="0.1">
+            <label for="irradiationTime">Tiempo irradiación (min):</label>
+            <input type="number" id="irradiationTime" value="10" step="0.1" min="0.1">
+            <input type="file" id="fileInput" accept=".txt">
+            <button onclick="loadActivityFromFile()">Cargar actividad</button>
+            <button onclick="showDataPreview()">Vista previa</button>
+        </div>
+        <div class="background-section">
+            <h3>Corrección por Fondo Radiactivo</h3>
+            <div class="background-controls">
+                <div>
+                    <label>
+                        <input type="checkbox" id="useBackground" checked>
+                        Usar corrección de fondo
+                    </label>
+                </div>
+                <div>
+                    <label for="backgroundMethod">Método:</label>
+                    <select id="backgroundMethod">
+                        <option value="auto">Calcular automáticamente (primeros puntos)</option>
+                        <option value="manual">Introducir valor manual</option>
+                    </select>
+                </div>
+                <div id="manualBackgroundContainer">
+                    <label for="manualBackgroundValue">Valor del fondo (cuentas/min):</label>
+                    <input type="number" id="manualBackgroundValue" value="50" step="0.1" min="0">
+                </div>
+                <div id="autoBackgroundContainer">
+                    <label for="backgroundPoints">Puntos para calcular fondo:</label>
+                    <input type="number" id="backgroundPoints" value="5" min="3" max="15" step="1">
+                </div>
+                <div>
+                    <button onclick="calculateBackground()">Calcular fondo</button>
+                </div>
+            </div>
+            <div id="backgroundResult">
+                <strong>Fondo calculado:</strong> <span id="backgroundValueDisplay">50.00</span> ± <span id="backgroundErrorDisplay">2.24</span> cuentas/min
+                <button onclick="applyBackgroundToTable()">Aplicar a tabla</button>
+            </div>
+        </div>
+        <div class="table-container">
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>Tiempo (min)</th>
+                        <th>Actividad Bruta</th>
+                        <th>Actividad Neta</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTableBody">
+                </tbody>
+            </table>
+        </div>
+        <div id="dataPreview"></div>
+        <div id="messageArea"></div>
+        <button class="main-button" onclick="calculateLambda()">Calcular Lambda</button>
+        <div class="chart-container">
+            <canvas id="myChart"></canvas>
+        </div>
+        <div class="results">
+            <h3>Resultados del ajuste exponencial</h3>
+            <div class="equation" id="equation">La ecuación aparecerá aquí después del cálculo</div>
+            <div class="additional-results">
+                <div class="result-item">
+                    <div class="result-label">Constante de desintegración (λ)</div>
+                    <div class="result-value" id="lambdaValue">-</div>
+                    <div>min<sup>-1</sup></div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Actividad inicial A(0)</div>
+                    <div class="result-value" id="a0Value">-</div>
+                    <div>unidades</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Semivida T<sub>1/2</sub></div>
+                    <div class="result-value" id="halfLifeValue">-</div>
+                    <div>minutos</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Vida media τ</div>
+                    <div class="result-value" id="meanLifeValue">-</div>
+                    <div>minutos</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Actividad de saturación A<sub>s</sub></div>
+                    <div class="result-value" id="saturationActivityValue">-</div>
+                    <div>unidades</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Factor de saturación A(0)/A<sub>s</sub></div>
+                    <div class="result-value" id="saturationFactorValue">-</div>
+                    <div>adimensional</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Valor del fondo</div>
+                    <div class="result-value" id="backgroundValue">-</div>
+                    <div>cuentas/min</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-label">Coeficiente de determinación (R²)</div>
+                    <div class="result-value" id="rSquared">-</div>
+                    <div>adimensional</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Botones de exportación movidos debajo de los resultados y con tamaño aumentado -->
+        <div class="large-export-buttons">
+            <button class="large-export-btn" onclick="exportResults()">
+                <span>📄</span> Exportar Resultados
+            </button>
+            <button class="large-export-btn" onclick="exportChart()">
+                <span>📊</span> Exportar Gráfica
+            </button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
+
+   
